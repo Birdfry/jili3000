@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#111418">
+<title>激励 3000</title>
+<style>
+:root{--bg:#f6f5f2;--fg:#17191c;--mut:#6b7078;--card:#fff;--line:#e3e1dc;--acc:#2f6fed;--ok:#1f9d55;--no:#d9822b;--bar:#2f6fed}
+@media (prefers-color-scheme:dark){:root{--bg:#111418;--fg:#eef0f3;--mut:#9aa1ab;--card:#1b1f25;--line:#2b3038;--acc:#6d9bff;--ok:#3cc47c;--no:#f0a24f;--bar:#6d9bff}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif}
+body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+#top{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;font-size:14px;color:var(--mut)}
+#top button{background:none;border:0;color:var(--mut);font-size:13px;padding:6px 4px}
+#bar{height:3px;background:var(--line);margin:0 18px;border-radius:3px;overflow:hidden}
+#bar i{display:block;height:100%;width:0;background:var(--bar)}
+#main{flex:1;display:flex;flex-direction:column;justify-content:center;padding:18px 22px;overflow:auto}
+#wrow{display:flex;align-items:baseline;flex-wrap:wrap;gap:10px}
+#word{font-size:44px;font-weight:700;letter-spacing:.3px;word-break:break-word;line-height:1.15}
+#tag{font-size:12px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--mut);white-space:nowrap}
+#tag.f{color:var(--no);border-color:var(--no)}
+#pos{margin-top:10px;color:var(--mut);font-size:16px;font-style:italic}
+#mean{margin-top:14px;font-size:21px;line-height:1.55}
+#mem{margin-top:18px;font-size:15px;line-height:1.6;color:var(--mut);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+#rev{margin-top:14px;font-size:12px;color:var(--acc)}
+#ctl{display:flex;justify-content:center;gap:28px;padding:4px 0 6px}
+#ctl button{background:none;border:0;color:var(--mut);font-size:15px;padding:10px 14px}
+#btns{display:grid;grid-template-columns:1fr 1.2fr 1.2fr;gap:10px;padding:8px 16px 18px}
+#btns button{height:62px;border-radius:16px;border:1px solid var(--line);background:var(--card);color:var(--fg);font-size:18px;font-weight:600}
+#btns #bForget{background:var(--no);border-color:var(--no);color:#fff}
+#btns #bForget.on{opacity:.55}
+#btns #bOk{background:var(--ok);border-color:var(--ok);color:#fff}
+#btns button:disabled{opacity:.35}
+#start{position:fixed;inset:0;display:flex;align-items:flex-end;justify-content:center;padding:0 16px calc(110px + env(safe-area-inset-bottom));background:linear-gradient(transparent 40%,var(--bg) 85%);z-index:5}
+#start button{width:100%;max-width:420px;height:64px;border-radius:18px;border:0;background:var(--acc);color:#fff;font-size:20px;font-weight:700}
+#done{display:none;flex:1;align-items:center;justify-content:center;flex-direction:column;font-size:24px;gap:10px}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+<div id="top"><span id="stat"></span><button id="bReset">重置</button></div>
+<div id="bar"><i id="barI"></i></div>
+<div id="main">
+  <div id="wrow"><div id="word"></div><span id="tag"></span></div>
+  <div id="pos"></div>
+  <div id="mean"></div>
+  <div id="mem"></div>
+  <div id="rev" class="hide">回看中 · 点此回到当前</div>
+</div>
+<div id="done"><div>🎉</div><div>全部记住了</div></div>
+<div id="ctl"><button id="bPause">暂停</button><button id="bMute">静音</button></div>
+<div id="btns"><button id="bPrev">上一词</button><button id="bForget">忘记</button><button id="bOk">记得</button></div>
+<div id="start"><button id="bStart">开始</button></div>
+<audio id="au" preload="auto" playsinline></audio>
+<script src="words.js"></script>
+<script>
+(function(){
+"use strict";
+var W=window.WORDS, N=W.length, KEY="jl3000_state", BAK="jl3000_state_bak", VER=1;
+var SHOW_MS=10000, HIST=60;
+var $=function(id){return document.getElementById(id)};
+function pad(i){return ("000"+i).slice(-4)}
+function rnd(a,b){return a+Math.floor(Math.random()*(b-a+1))}
+
+/* ---------- state ---------- */
+function fresh(){return {v:VER,n:0,remembered:{},counts:{},shown:{},queue:{},cur:null,hist:[],muted:false,paused:false}}
+var S=load();
+function load(){
+  var raw=null;
+  try{raw=localStorage.getItem(KEY)}catch(e){}
+  if(raw){
+    try{var o=JSON.parse(raw); if(o&&typeof o==="object"&&o.counts) return upgrade(o);}catch(e){}
+    try{localStorage.setItem(KEY+"_corrupt_"+Date.now(),raw)}catch(e){}
+    try{var b=localStorage.getItem(BAK); if(b){var ob=JSON.parse(b); if(ob&&ob.counts) return upgrade(ob);}}catch(e){}
+  }
+  return fresh();
+}
+function upgrade(o){
+  var f=fresh(); for(var k in f) if(o[k]===undefined) o[k]=f[k];
+  o.v=VER; return o;
+}
+function save(){
+  try{
+    var s=JSON.stringify(S), prev=localStorage.getItem(KEY);
+    if(prev&&prev!==s) localStorage.setItem(BAK,prev);
+    localStorage.setItem(KEY,s);
+  }catch(e){}
+}
+
+/* ---------- scheduler ---------- */
+function remaining(){return N-Object.keys(S.remembered).length}
+function slotTaken(d){for(var k in S.queue) if(S.queue[k]===d) return true; return false}
+function schedule(id){
+  if(S.remembered[id]) return;
+  var n=S.n, due=n+rnd(10,30)+1;
+  if(slotTaken(due)){
+    var free=[]; for(var d=n+11;d<=n+31;d++) if(!slotTaken(d)) free.push(d);
+    if(free.length) due=free[rnd(0,free.length-1)];
+    else{ due=n+32; while(slotTaken(due)) due++; }
+  }
+  S.queue[id]=due;
+}
+function pickNext(){
+  var n=S.n, best=null, bd=Infinity, k;
+  for(k in S.queue) if(S.queue[k]<=n && S.queue[k]<bd){bd=S.queue[k];best=+k}
+  if(best!==null) return best;
+  var pool=[]; for(var i=1;i<=N;i++) if(!S.shown[i]&&!S.remembered[i]) pool.push(i);
+  if(pool.length) return pool[rnd(0,pool.length-1)];
+  bd=Infinity; for(k in S.queue) if(S.queue[k]<bd){bd=S.queue[k];best=+k}
+  return best;
+}
+/* finalize current word and show the next one */
+function advance(){
+  if(S.cur && !S.remembered[S.cur.id] && S.queue[S.cur.id]===undefined) schedule(S.cur.id);
+  S.n++;
+  var id=pickNext();
+  if(id===null||id===undefined){S.cur=null; save(); render(); return;}
+  delete S.queue[id];
+  S.shown[id]=1;
+  S.counts[id]=(S.counts[id]||0)+1;
+  S.cur={id:id,forgot:false};
+  S.hist.push(id); if(S.hist.length>HIST) S.hist=S.hist.slice(-HIST);
+  save();
+  view=-1; beginWord();
+}
+
+/* ---------- playback / timer ---------- */
+var started=false, view=-1, elapsed=0, lastT=0, firstDone=false, tick=null, seq=0, step=0, playId=null, forgetPending=false;
+var au=$("au");
+function shownId(){return view>=0?S.hist[view]:(S.cur&&S.cur.id)}
+function beginWord(){
+  elapsed=0; firstDone=false; forgetPending=false; render();
+  if(started && !S.paused){ startAudio(shownId()); }
+  else stopAudio();
+}
+function stopAudio(){seq++; try{au.pause()}catch(e){} playId=null}
+function startAudio(id){
+  stopAudio(); if(!id) return;
+  var my=seq; playId=id; step=0; playStep(my);
+}
+function playStep(my){
+  if(my!==seq) return;
+  var id=playId, src=step<3?"audio/en/"+pad(id)+".mp3":"audio/zh/"+pad(id)+".mp3";
+  au.src=src; au.muted=S.muted;
+  var p=au.play(); if(p&&p.catch) p.catch(function(){ if(my===seq) setTimeout(function(){onEnd(my)},800) });
+}
+function onEnd(my){
+  if(my!==seq) return;
+  if(step===3) firstDone=true;
+  step=(step+1)%4;
+  setTimeout(function(){playStep(my)}, step===0?600:(step===3?350:250));
+}
+au.addEventListener("ended",function(){onEnd(seq)});
+au.addEventListener("error",function(){var my=seq; setTimeout(function(){onEnd(my)},500)});
+function loop(){
+  var t=performance.now(), dt=t-lastT; lastT=t;
+  if(started && !S.paused && S.cur){
+    if(dt>0&&dt<1000) elapsed+=dt;
+    var p=Math.min(1,elapsed/SHOW_MS); $("barI").style.width=(p*100)+"%";
+    if(elapsed>=SHOW_MS && (firstDone||elapsed>=SHOW_MS*4)){
+      if(view>=0 && !forgetPending){ /* reviewing: hold */ }
+      else advance();
+    }
+  }
+}
+setInterval(loop,100);
+
+/* ---------- render ---------- */
+function render(){
+  $("stat").textContent="已记得 "+Object.keys(S.remembered).length+" / "+N;
+  if(!S.cur){ $("main").classList.add("hide"); $("btns").classList.add("hide"); $("ctl").classList.add("hide"); $("bar").classList.add("hide"); $("done").style.display="flex"; $("start").classList.add("hide"); return; }
+  $("main").classList.remove("hide"); $("btns").classList.remove("hide"); $("ctl").classList.remove("hide"); $("bar").classList.remove("hide"); $("done").style.display="none";
+  var id=shownId(), w=W[id-1], c=S.counts[id]||1;
+  $("word").textContent=w[0]; $("pos").textContent=w[1]; $("mean").textContent=w[2];
+  $("mem").textContent=w[3]; $("mem").classList.toggle("hide",!w[3]);
+  var tag=c<=1?"首次":"重复 "+(c-1)+" 次";
+  var forgot=(view<0&&S.cur.forgot)||(view>=0&&forgetPending);
+  $("tag").textContent=tag; $("tag").classList.toggle("f",forgot);
+  $("bForget").classList.toggle("on",forgot);
+  $("rev").classList.toggle("hide",view<0);
+  $("bPrev").disabled=!(view<0?S.hist.length>1:view>0);
+  $("bPause").textContent=S.paused?"继续":"暂停";
+  $("bMute").textContent=S.muted?"取消静音":"静音";
+  $("barI").style.width=Math.min(100,elapsed/SHOW_MS*100)+"%";
+  $("start").classList.toggle("hide",started);
+}
+
+/* ---------- actions ---------- */
+$("bStart").onclick=function(){
+  started=true; S.paused=false; save();
+  au.muted=true; var p=au.play(); if(p&&p.catch)p.catch(function(){});
+  if(!S.cur) advance(); else { elapsed=0; firstDone=false; render(); startAudio(shownId()); }
+};
+$("bOk").onclick=function(){
+  if(!started) return $("bStart").onclick();
+  var id=shownId(); if(!id) return;
+  S.remembered[id]=1; delete S.queue[id];
+  if(S.cur&&S.cur.id===id) S.cur.forgot=false;
+  save(); view=-1; advance();
+};
+$("bForget").onclick=function(){
+  if(!started) return $("bStart").onclick();
+  if(view<0){ if(S.cur){S.cur.forgot=true; save(); render();} return; }
+  /* forgot on a reviewed word: mark only, then let a fresh countdown on it finish before moving on */
+  var id=S.hist[view];
+  if(!forgetPending){ forgetPending=true; elapsed=0; }
+  render();
+};
+$("bPrev").onclick=function(){
+  if(view<0){ if(S.hist.length<2) return; view=S.hist.length-2; }
+  else if(view>0) view--; else return;
+  forgetPending=false; elapsed=0; firstDone=false; render();
+  if(started&&!S.paused) startAudio(shownId());
+};
+$("rev").onclick=function(){ view=-1; forgetPending=false; elapsed=0; firstDone=false; render(); if(started&&!S.paused) startAudio(shownId()); };
+$("bPause").onclick=function(){
+  if(!started) return $("bStart").onclick();
+  S.paused=!S.paused; save();
+  if(S.paused) stopAudio(); else startAudio(shownId());
+  render();
+};
+$("bMute").onclick=function(){ S.muted=!S.muted; au.muted=S.muted; save(); render(); };
+$("bReset").onclick=function(){
+  if(!confirm("确定要重置全部进度吗？")) return;
+  if(!confirm("再次确认：进度将清空，无法恢复。")) return;
+  try{localStorage.setItem(BAK,JSON.stringify(S))}catch(e){}
+  S=fresh(); save(); stopAudio(); started=false; view=-1; elapsed=0; render();
+};
+document.addEventListener("visibilitychange",function(){ save(); });
+window.addEventListener("pagehide",save);
+window.addEventListener("beforeunload",save);
+
+/* ---------- restore ---------- */
+if(S.cur && S.remembered[S.cur.id]) { /* defensive */ S.cur=null; }
+if(!S.cur && remaining()>0){
+  /* first run (or recovering): pick the first word without needing audio yet */
+  S.n++; var id0=pickNext(); delete S.queue[id0]; S.shown[id0]=1; S.counts[id0]=(S.counts[id0]||0)+1; S.cur={id:id0,forgot:false}; S.hist.push(id0); save();
+}
+lastT=performance.now(); render();
+})();
+</script>
+</body>
+</html>

@@ -59,7 +59,7 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(s
 (function(){
 "use strict";
 var W=window.WORDS, N=W.length, KEY="jl3000_state", BAK="jl3000_state_bak", VER=1;
-var SHOW_MS=8000, HIST=60, RATE_EN=1.2, RATE_ZH=1.5;
+var SHOW_MS=8000, HIST=60, RATE_EN=1.4, RATE_ZH=1.5, EN_REP=5;
 var $=function(id){return document.getElementById(id)};
 function pad(i){return ("000"+i).slice(-4)}
 function rnd(a,b){return a+Math.floor(Math.random()*(b-a+1))}
@@ -142,16 +142,16 @@ function startAudio(id){
 }
 function playStep(my){
   if(my!==seq) return;
-  var id=playId, src=step<3?"audio/en/"+pad(id)+".mp3":"audio/zh/"+pad(id)+".mp3";
+  var id=playId, src=step<EN_REP?"audio/en/"+pad(id)+".mp3":"audio/zh/"+pad(id)+".mp3";
   au.src=src; au.muted=S.muted;
-  var r=step<3?RATE_EN:RATE_ZH; au.defaultPlaybackRate=r; au.playbackRate=r;
+  var r=step<EN_REP?RATE_EN:RATE_ZH; au.defaultPlaybackRate=r; au.playbackRate=r;
   var p=au.play(); if(p&&p.catch) p.catch(function(){ if(my===seq) setTimeout(function(){onEnd(my)},800) });
 }
 function onEnd(my){
   if(my!==seq) return;
-  if(step===3) firstDone=true;
-  step=(step+1)%4;
-  setTimeout(function(){playStep(my)}, step===0?400:(step===3?250:150));
+  if(step===EN_REP) firstDone=true;
+  step=(step+1)%(EN_REP+1);
+  setTimeout(function(){playStep(my)}, step===0?400:(step===EN_REP?200:60));
 }
 au.addEventListener("ended",function(){onEnd(seq)});
 au.addEventListener("error",function(){var my=seq; setTimeout(function(){onEnd(my)},500)});

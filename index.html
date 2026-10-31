@@ -51,12 +51,25 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(s
 #start{position:fixed;inset:0;display:flex;align-items:flex-end;justify-content:center;padding:0 18px calc(110px + env(safe-area-inset-bottom));background:linear-gradient(rgba(242,242,247,0) 40%,rgba(242,242,247,.95) 85%);z-index:5}
 #start button{width:100%;max-width:420px;height:64px;border-radius:22px;border:0;background:var(--grad);color:#fff;font-size:20px;font-weight:700;box-shadow:0 12px 28px rgba(72,78,232,.32)}
 #done{display:none;flex:1;align-items:center;justify-content:center;flex-direction:column;font-size:24px;gap:10px;font-weight:700}
+#auth{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(242,242,247,.55);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+#auth .box{width:100%;max-width:380px;border-radius:28px;padding:28px 22px}
+#auth h2{margin:0 0 6px;font-size:28px;font-weight:800;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+#auth p{margin:0 0 18px;color:var(--mut);font-size:14px}
+#auth input{width:100%;height:50px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.85);padding:0 14px;font-size:16px;margin-bottom:12px;outline:none}
+#auth input:focus{border-color:var(--ind)}
+#auth .row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+#auth button{height:50px;border-radius:16px;border:0;font-size:17px;font-weight:700}
+#aLogin{background:var(--grad);color:#fff}
+#aReg{background:rgba(72,78,232,.10);color:var(--ind)}
+#aSkip{display:block;margin:14px auto 0;background:none!important;color:var(--mut)!important;font-size:14px!important;font-weight:500!important;height:auto!important}
+#aMsg{min-height:20px;font-size:13px;color:#D70015;margin-top:10px;text-align:center}
+#who{font-size:13px;color:var(--mut);margin-right:8px}
 .hide{display:none!important}
 </style>
 </head>
 <body>
 <div id="glow"><i></i><i></i><i></i></div>
-<div id="top"><span id="stat"></span><button id="bReset">重置</button></div>
+<div id="top"><span id="stat"></span><span><span id="who"></span><button id="bAcct">登录</button> <button id="bReset">重置</button></span></div>
 <div id="bar"><i id="barI"></i></div>
 <div id="main">
  <div id="card" class="glass">
@@ -73,8 +86,15 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(s
 <div id="ctl"><button id="bPause">暂停</button><button id="bMute">静音</button></div>
 <div id="btns"><button id="bPrev">上一词</button><button id="bForget">忘记</button><button id="bOk">记得</button></div>
 <div id="start"><button id="bStart">开始</button></div>
+<div id="auth" class="hide"><div class="box glass">
+<h2>激励 3000</h2><p>登录后进度会在你所有设备间同步</p>
+<input id="aName" placeholder="用户名" autocomplete="username" maxlength="20">
+<input id="aPw" type="password" placeholder="密码（至少 6 位）" autocomplete="current-password">
+<div class="row"><button id="aLogin">登录</button><button id="aReg">注册</button></div>
+<div id="aMsg"></div><button id="aSkip">先不登录</button></div></div>
 <audio id="au" preload="auto" playsinline></audio>
 <script src="words.js"></script>
+<script src="supabase.js"></script>
 <script>
 (function(){
 "use strict";
@@ -87,7 +107,7 @@ function pad(i){return ("000"+i).slice(-4)}
 function rnd(a,b){return a+Math.floor(Math.random()*(b-a+1))}
 
 /* ---------- state ---------- */
-function fresh(){return {v:VER,n:0,remembered:{},counts:{},shown:{},queue:{},cur:null,hist:[],muted:false,paused:false}}
+function fresh(){return {v:VER,t:0,n:0,remembered:{},counts:{},shown:{},queue:{},cur:null,hist:[],muted:false,paused:false}}
 var S=load();
 function load(){
   var raw=null;
@@ -104,11 +124,13 @@ function upgrade(o){
   o.v=VER; return o;
 }
 function save(){
+  S.t=Date.now();
   try{
     var s=JSON.stringify(S), prev=localStorage.getItem(KEY);
     if(prev&&prev!==s) localStorage.setItem(BAK,prev);
     localStorage.setItem(KEY,s);
   }catch(e){}
+  if(window.__push) window.__push();
 }
 
 /* ---------- scheduler ---------- */
@@ -267,6 +289,45 @@ if(!S.cur && remaining()>0){
   S.n++; var id0=pickNext(); delete S.queue[id0]; S.shown[id0]=1; S.counts[id0]=(S.counts[id0]||0)+1; S.cur={id:id0,forgot:false}; S.hist.push(id0); save();
 }
 lastT=performance.now(); render();
+
+/* ---------- cloud sync (Supabase) ---------- */
+var SB_URL="https://ioerlefwaainckdlfmda.supabase.co", SB_KEY="sb_publishable_Vc-dl8Ijdd48IcBxQ1gTng_qla7sC2P";
+var sb=null, me=null, pushT=null, pulling=false;
+try{ if(window.supabase&&SB_KEY.indexOf("__")!==0) sb=window.supabase.createClient(SB_URL,SB_KEY); }catch(e){}
+function nm2email(n){ var b=new TextEncoder().encode(n.trim().toLowerCase()), h=""; for(var i=0;i<b.length;i++) h+=("0"+b[i].toString(16)).slice(-2); return "u"+h+"@birdfry.github.io"; }
+function showAuth(on){ $("auth").classList.toggle("hide",!on); $("aMsg").textContent=""; }
+function setWho(){ $("who").textContent=me?me.user_metadata&&me.user_metadata.name||"":""; $("bAcct").textContent=me?"退出":"登录"; $("bAcct").classList.toggle("hide",!sb); }
+window.__push=function(){ if(!sb||!me||pulling) return; clearTimeout(pushT); pushT=setTimeout(pushNow,1500); };
+function pushNow(){ if(!sb||!me) return; return sb.from("progress").upsert({user_id:me.id,state:S,updated_at:new Date().toISOString()}).then(function(r){ if(r.error) console.warn(r.error); }); }
+function pull(){
+  if(!sb||!me) return Promise.resolve();
+  pulling=true;
+  return sb.from("progress").select("state").eq("user_id",me.id).maybeSingle().then(function(r){
+    pulling=false;
+    var c=r.data&&r.data.state;
+    if(c&&c.counts&&(c.t||0)>(S.t||0)){ stopAudio(); S=upgrade(c); var muted=S.muted; started=false; view=-1; elapsed=0; try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){} render(); }
+    else pushNow();
+  },function(){pulling=false;});
+}
+function after(r,isReg){
+  if(r.error){ var m=r.error.message||"";
+    $("aMsg").textContent=/already|registered|exists/i.test(m)?"这个用户名已经被注册了，换一个吧":/Invalid login/i.test(m)?(isReg?m:"用户名或密码不对"):/Password/i.test(m)?"密码至少 6 位":m; return; }
+  me=r.data.user; setWho(); showAuth(false); pull();
+}
+function creds(){ var n=$("aName").value.trim(), p=$("aPw").value;
+  if(!n){$("aMsg").textContent="请输入用户名";return null} if(p.length<6){$("aMsg").textContent="密码至少 6 位";return null}
+  var e=nm2email(n); if(e.split("@")[0].length>64){$("aMsg").textContent="用户名太长了";return null} return {n:n,e:e,p:p}; }
+$("aLogin").onclick=function(){ var c=creds(); if(!c) return; $("aMsg").textContent="登录中…"; sb.auth.signInWithPassword({email:c.e,password:c.p}).then(function(r){after(r,false)}); };
+$("aReg").onclick=function(){ var c=creds(); if(!c) return; $("aMsg").textContent="注册中…";
+  sb.auth.signUp({email:c.e,password:c.p,options:{data:{name:c.n}}}).then(function(r){
+    if(!r.error&&r.data.user&&r.data.user.identities&&r.data.user.identities.length===0){ $("aMsg").textContent="这个用户名已经被注册了，换一个吧"; return; }
+    if(!r.error&&!r.data.session){ $("aMsg").textContent="注册成功，但服务器要求邮箱验证，请联系管理员关闭"; return; }
+    after(r,true); }); };
+$("aSkip").onclick=function(){ showAuth(false); try{localStorage.setItem("jl3000_skip","1")}catch(e){} };
+$("bAcct").onclick=function(){ if(!sb) return; if(me){ if(!confirm("退出登录？本机进度会保留。")) return; window.__push&&pushNow(); sb.auth.signOut(); me=null; setWho(); } else showAuth(true); };
+document.addEventListener("visibilitychange",function(){ if(document.visibilityState==="visible") pull(); else if(me) pushNow(); });
+if(sb){ sb.auth.getSession().then(function(r){ me=r.data.session&&r.data.session.user||null; setWho(); if(me) pull(); else { var sk=null; try{sk=localStorage.getItem("jl3000_skip")}catch(e){} if(!sk) showAuth(true); } }); }
+setWho();
 })();
 </script>
 </body>

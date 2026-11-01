@@ -102,7 +102,7 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(s
 (function(){
 "use strict";
 var W=window.WORDS, N=W.length, KEY="jl3000_state", BAK="jl3000_state_bak", VER=1;
-var SHOW_MS=10000, HIST=60, RATE_EN=1.4, RATE_ZH=1.5, EN_REP=5;
+var SHOW_MS=10000, HIST=60, RATE_EN=1.4, RATE_ZH=1.8, EN_REP=1;
 var $=function(id){return document.getElementById(id)};
 var IDX={}; W.forEach(function(w,i){IDX[w[0].toLowerCase()]=i});
 function esc(t){return String(t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}

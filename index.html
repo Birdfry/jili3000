@@ -22,7 +22,9 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(s
 #top button{background:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.7);color:var(--ind);font-size:14px;padding:6px 14px;border-radius:999px;-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
 #bar{height:6px;background:rgba(60,60,67,.08);margin:0 22px;border-radius:6px;overflow:hidden}
 #bar i{display:block;height:100%;width:0;background:var(--grad);border-radius:6px}
-#main{flex:1;display:flex;flex-direction:column;justify-content:center;padding:20px 18px;overflow:auto}
+#main{flex:1;display:flex;flex-direction:column;justify-content:center;padding:20px 18px;overflow:auto;overscroll-behavior:contain;touch-action:pan-x pinch-zoom;user-select:none;-webkit-user-select:none}
+#card{will-change:transform,opacity}
+#hint{text-align:center;font-size:12px;color:var(--mut);margin-top:12px;opacity:.75}
 #card{border-radius:28px;padding:28px 24px 24px}
 #wrow{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
 #word{font-size:46px;font-weight:800;letter-spacing:-.5px;word-break:break-word;line-height:1.12;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
@@ -41,7 +43,7 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(s
 #rev{margin-top:16px;font-size:13px;color:var(--ind);text-align:center}
 #ctl{display:flex;justify-content:center;gap:12px;padding:6px 0 8px}
 #ctl button{background:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.7);color:var(--ind);font-size:15px;padding:9px 20px;border-radius:999px;-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);box-shadow:0 2px 8px rgba(0,0,0,.04)}
-#btns{display:grid;grid-template-columns:1fr 1.2fr 1.2fr;gap:12px;padding:8px 18px 22px}
+#btns{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:8px 18px 22px}
 #btns button{height:62px;border-radius:22px;border:1px solid rgba(255,255,255,.7);background:var(--glass);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);box-shadow:var(--shadow);color:var(--fg);font-size:18px;font-weight:600;transition:transform .12s}
 #btns button:active{transform:scale(.97)}
 #btns #bForget{background:var(--grad);border:0;color:#fff;box-shadow:0 8px 20px rgba(72,78,232,.28)}
@@ -81,10 +83,11 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(s
   <div id="mem"></div>
  </div>
   <div id="rev" class="hide">回看中 · 点此回到当前</div>
+  <div id="hint">上滑下一个 · 下滑回看上一个</div>
 </div>
 <div id="done"><div>🎉</div><div>全部记住了</div></div>
 <div id="ctl"><button id="bPause">暂停</button><button id="bMute">静音</button></div>
-<div id="btns"><button id="bPrev">上一词</button><button id="bForget">忘记</button><button id="bOk">记得</button></div>
+<div id="btns"><button id="bForget">忘记</button><button id="bOk">记得</button></div>
 <div id="start"><button id="bStart">开始</button></div>
 <div id="auth" class="hide"><div class="box glass">
 <h2>激励 3000</h2><p>登录后进度会在你所有设备间同步</p>
@@ -99,7 +102,7 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(s
 (function(){
 "use strict";
 var W=window.WORDS, N=W.length, KEY="jl3000_state", BAK="jl3000_state_bak", VER=1;
-var SHOW_MS=8000, HIST=60, RATE_EN=1.4, RATE_ZH=1.5, EN_REP=5;
+var SHOW_MS=10000, HIST=60, RATE_EN=1.4, RATE_ZH=1.5, EN_REP=5;
 var $=function(id){return document.getElementById(id)};
 var IDX={}; W.forEach(function(w,i){IDX[w[0].toLowerCase()]=i});
 function esc(t){return String(t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
@@ -204,10 +207,7 @@ function loop(){
   if(started && !S.paused && S.cur){
     if(dt>0&&dt<1000) elapsed+=dt;
     var p=Math.min(1,elapsed/SHOW_MS); $("barI").style.width=(p*100)+"%";
-    if(elapsed>=SHOW_MS && (firstDone||elapsed>=SHOW_MS*4)){
-      if(view>=0 && !forgetPending){ /* reviewing: hold */ }
-      else advance();
-    }
+    if(elapsed>=SHOW_MS && !sliding) goNext();
   }
 }
 setInterval(loop,100);
@@ -230,7 +230,6 @@ function render(){
   $("tag").textContent=tag; $("tag").classList.toggle("f",forgot);
   $("bForget").classList.toggle("on",forgot);
   $("rev").classList.toggle("hide",view<0);
-  $("bPrev").disabled=!(view<0?S.hist.length>1:view>0);
   $("bPause").textContent=S.paused?"继续":"暂停";
   $("bMute").textContent=S.muted?"取消静音":"静音";
   $("barI").style.width=Math.min(100,elapsed/SHOW_MS*100)+"%";
@@ -248,7 +247,7 @@ $("bOk").onclick=function(){
   var id=shownId(); if(!id) return;
   S.remembered[id]=1; delete S.queue[id];
   if(S.cur&&S.cur.id===id) S.cur.forgot=false;
-  save(); view=-1; advance();
+  save(); slide(1,function(){ view=-1; advance(); });
 };
 $("bForget").onclick=function(){
   if(!started) return $("bStart").onclick();
@@ -258,13 +257,68 @@ $("bForget").onclick=function(){
   if(!forgetPending){ forgetPending=true; elapsed=0; }
   render();
 };
-$("bPrev").onclick=function(){
-  if(view<0){ if(S.hist.length<2) return; view=S.hist.length-2; }
-  else if(view>0) view--; else return;
-  forgetPending=false; elapsed=0; firstDone=false; render();
-  if(started&&!S.paused) startAudio(shownId());
-};
-$("rev").onclick=function(){ view=-1; forgetPending=false; elapsed=0; firstDone=false; render(); if(started&&!S.paused) startAudio(shownId()); };
+/* ---------- 抖音式滑动：上滑下一个，下滑上一个 ---------- */
+var sliding=false, card=$("card"), mainEl=$("main");
+function showView(){ forgetPending=false; elapsed=0; firstDone=false; render(); if(started&&!S.paused) startAudio(shownId()); }
+function canPrev(){ return view<0?S.hist.length>1:view>0; }
+function slide(dir,fn){ /* dir 1 = 向上划走（下一个），-1 = 向下划走（上一个） */
+  if(sliding) return; sliding=true;
+  var h=mainEl.clientHeight||window.innerHeight;
+  card.style.transition="transform .22s ease-in,opacity .22s";
+  card.style.transform="translateY("+(-dir*h*0.7)+"px)"; card.style.opacity="0";
+  setTimeout(function(){
+    fn();
+    card.style.transition="none";
+    card.style.transform="translateY("+(dir*h*0.7)+"px)";
+    void card.offsetHeight;
+    card.style.transition="transform .28s cubic-bezier(.2,.8,.2,1),opacity .28s";
+    card.style.transform="translateY(0)"; card.style.opacity="1";
+    setTimeout(function(){ sliding=false; card.style.transition=""; },300);
+  },220);
+}
+function goNext(){
+  if(!S.cur) return;
+  if(!started){ $("bStart").onclick(); return; }
+  slide(1,function(){
+    if(view>=0){ view++; if(view>=S.hist.length-1) view=-1; showView(); }
+    else { view=-1; advance(); }
+  });
+}
+function goPrev(){
+  if(!canPrev()){ bounce(); return; }
+  slide(-1,function(){ if(view<0) view=S.hist.length-2; else view--; showView(); });
+}
+function bounce(){ card.style.transition="transform .25s"; card.style.transform="translateY(0)"; }
+var ty=null, tdy=0, tTop=false, tBot=false, tScroll=0;
+mainEl.addEventListener("touchstart",function(e){
+  if(sliding||e.touches.length>1){ty=null;return;}
+  ty=e.touches[0].clientY; tdy=0; tScroll=mainEl.scrollTop;
+  tTop=mainEl.scrollTop<=0; tBot=mainEl.scrollTop+mainEl.clientHeight>=mainEl.scrollHeight-1;
+  card.style.transition="none";
+},{passive:true});
+mainEl.addEventListener("touchmove",function(e){
+  if(ty===null) return;
+  tdy=e.touches[0].clientY-ty;
+  e.preventDefault();
+  if((tdy<0&&!tBot)||(tdy>0&&!tTop)){ mainEl.scrollTop=tScroll-tdy; return; } /* 内容太长时先滚动内容 */
+  e.preventDefault();
+  card.style.transform="translateY("+(tdy*0.5)+"px)";
+},{passive:false});
+mainEl.addEventListener("touchend",function(){
+  if(ty===null) return; ty=null;
+  if(tdy<-60&&tBot) goNext(); else if(tdy>60&&tTop) goPrev(); else bounce();
+});
+var wheelLock=0;
+window.addEventListener("wheel",function(e){
+  var t=Date.now(); if(t<wheelLock||Math.abs(e.deltaY)<30) return;
+  wheelLock=t+700; if(e.deltaY>0) goNext(); else goPrev();
+},{passive:true});
+window.addEventListener("keydown",function(e){
+  if($("auth").classList.contains("hide")===false) return;
+  if(e.key==="ArrowDown"||e.key==="PageDown"){ e.preventDefault(); goNext(); }
+  else if(e.key==="ArrowUp"||e.key==="PageUp"){ e.preventDefault(); goPrev(); }
+});
+$("rev").onclick=function(){ slide(1,function(){ view=-1; showView(); }); };
 $("bPause").onclick=function(){
   if(!started) return $("bStart").onclick();
   S.paused=!S.paused; save();

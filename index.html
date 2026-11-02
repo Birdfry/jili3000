@@ -128,7 +128,7 @@ function pad(i){return ("000"+i).slice(-4)}
 function rnd(a,b){return a+Math.floor(Math.random()*(b-a+1))}
 
 /* ---------- state ---------- */
-function fresh(){return {v:VER,t:0,n:0,remembered:{},counts:{},shown:{},queue:{},cur:null,hist:[],muted:false,paused:false}}
+function fresh(){return {v:VER,t:0,n:0,rs:0,remembered:{},counts:{},shown:{},queue:{},cur:null,hist:[],muted:false,paused:false}}
 var S=load();
 function load(){
   var raw=null;
@@ -353,7 +353,7 @@ $("bReset").onclick=function(){
   if(!confirm("确定要重置全部进度吗？")) return;
   if(!confirm("再次确认：进度将清空，无法恢复。")) return;
   try{localStorage.setItem(BAK,JSON.stringify(S))}catch(e){}
-  S=fresh(); save(); stopAudio(); started=false; view=-1; elapsed=0; render();
+  S=fresh(); S.rs=Date.now(); save(); stopAudio(); started=false; view=-1; elapsed=0; render();
 };
 document.addEventListener("visibilitychange",function(){ save(); });
 window.addEventListener("pagehide",save);
@@ -381,18 +381,24 @@ function live(on){
   if(ch){ try{sb.removeChannel(ch)}catch(e){} ch=null; }
   if(!on||!sb||!me) return;
   ch=sb.channel("jl3000-"+me.id,{config:{broadcast:{self:false}}});
-  ch.on("broadcast",{event:"up"},function(m){ if(m&&m.payload&&(m.payload.t||0)>(S.t||0)) pull(); });
+  ch.on("broadcast",{event:"up"},function(m){ if(m&&m.payload) pull(); });
   ch.subscribe(function(st){ if(st==="SUBSCRIBED") pull(); });
 }
 setInterval(function(){ if(me&&document.visibilityState==="visible") pull(); },15000);
+/* 同步规则：重置过的以最近一次重置为准；否则划过单词数量(n)多的为准；相同时以最新修改为准 */
+function better(a,b){
+  var ra=a.rs||0, rb=b.rs||0; if(ra!==rb) return ra>rb;
+  var na=a.n||0, nb=b.n||0; if(na!==nb) return na>nb;
+  return (a.t||0)>(b.t||0);
+}
 function pull(){
   if(!sb||!me) return Promise.resolve();
   pulling=true;
   return sb.from("progress").select("state").eq("user_id",me.id).maybeSingle().then(function(r){
     pulling=false;
     var c=r.data&&r.data.state;
-    if(c&&c.counts&&(c.t||0)>(S.t||0)){ stopAudio(); S=upgrade(c); var muted=S.muted; started=false; view=-1; elapsed=0; try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){} render(); }
-    else if((S.t||0)>(c&&c.t||0)) pushNow(true);
+    if(c&&c.counts&&better(c,S)){ stopAudio(); S=upgrade(c); var muted=S.muted; started=false; view=-1; elapsed=0; try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){} render(); }
+    else if(!c||!c.counts||better(S,c)) pushNow(true);
   },function(){pulling=false;});
 }
 function after(r,isReg){

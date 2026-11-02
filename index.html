@@ -25,7 +25,13 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(s
 #main{flex:1;display:flex;flex-direction:column;justify-content:center;padding:20px 18px;overflow:auto;overscroll-behavior:contain;touch-action:pan-x pinch-zoom;user-select:none;-webkit-user-select:none}
 #card{will-change:transform,opacity}
 #hint{text-align:center;font-size:12px;color:var(--mut);margin-top:12px;opacity:.75}
-#card{border-radius:28px;padding:28px 24px 24px}
+#card{border-radius:28px;padding:28px 24px 24px;position:relative}
+.nav{display:none;position:absolute;right:14px;width:42px;height:42px;border-radius:50%;border:1px solid rgba(255,255,255,.7);background:rgba(255,255,255,.7);color:var(--ind);font-size:20px;line-height:1;cursor:pointer;box-shadow:0 4px 14px rgba(72,78,232,.15);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
+.nav:hover{background:var(--grad);color:#fff}
+.nav:disabled{opacity:.35;cursor:default;background:rgba(255,255,255,.7);color:var(--ind)}
+#nUp{top:14px} #nDn{bottom:14px}
+.pc{display:none}
+@media (hover:hover) and (pointer:fine){ .pc{display:inline} .mob{display:none} .nav{display:block} #card{padding-right:70px} }
 #wrow{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
 #word{font-size:46px;font-weight:800;letter-spacing:-.5px;word-break:break-word;line-height:1.12;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
 #tag{font-size:12px;font-weight:600;padding:4px 11px;border-radius:999px;background:rgba(72,78,232,.10);color:var(--ind);white-space:nowrap}
@@ -85,9 +91,11 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(s
   <div id="rel"></div>
   <div id="edef"></div>
   <div id="mem"></div>
+  <button id="nUp" class="nav" title="上一个 (W / ↑)">▲</button>
+  <button id="nDn" class="nav" title="下一个 (S / ↓)">▼</button>
  </div>
   <div id="rev" class="hide">回看中 · 点此回到当前</div>
-  <div id="hint">上滑下一个 · 下滑回看上一个</div>
+  <div id="hint"><span class="mob">上滑下一个 · 下滑回看上一个</span><span class="pc">W / ↑ 上一个 · S / ↓ 下一个</span></div>
 </div>
 <div id="done"><div>🎉</div><div>全部记住了</div></div>
 <div id="ctl"><button id="bPause">暂停</button><button id="bMute">静音</button></div>
@@ -320,9 +328,13 @@ window.addEventListener("wheel",function(e){
 },{passive:true});
 window.addEventListener("keydown",function(e){
   if($("auth").classList.contains("hide")===false) return;
-  if(e.key==="ArrowDown"||e.key==="PageDown"){ e.preventDefault(); goNext(); }
-  else if(e.key==="ArrowUp"||e.key==="PageUp"){ e.preventDefault(); goPrev(); }
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
+  var k=e.key.length===1?e.key.toLowerCase():e.key;
+  if(k==="ArrowDown"||k==="PageDown"||k==="s"){ e.preventDefault(); goNext(); }
+  else if(k==="ArrowUp"||k==="PageUp"||k==="w"){ e.preventDefault(); goPrev(); }
 });
+$("nUp").onclick=function(e){ e.stopPropagation(); goPrev(); };
+$("nDn").onclick=function(e){ e.stopPropagation(); goNext(); };
 $("rev").onclick=function(){ slide(1,function(){ view=-1; showView(); }); };
 $("bPause").onclick=function(){
   if(!started) return $("bStart").onclick();

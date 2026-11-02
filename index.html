@@ -351,13 +351,22 @@ lastT=performance.now(); render();
 
 /* ---------- cloud sync (Supabase) ---------- */
 var SB_URL="https://ioerlefwaainckdlfmda.supabase.co", SB_KEY="sb_publishable_Vc-dl8Ijdd48IcBxQ1gTng_qla7sC2P";
-var sb=null, me=null, pushT=null, pulling=false;
+var sb=null, me=null, pushT=null, pulling=false, ch=null;
 try{ if(window.supabase&&SB_KEY.indexOf("__")!==0) sb=window.supabase.createClient(SB_URL,SB_KEY); }catch(e){}
 function nm2email(n){ var b=new TextEncoder().encode(n.trim().toLowerCase()), h=""; for(var i=0;i<b.length;i++) h+=("0"+b[i].toString(16)).slice(-2); return "u"+h+"@birdfry.github.io"; }
 function showAuth(on){ $("auth").classList.toggle("hide",!on); $("aMsg").textContent=""; }
 function setWho(){ $("who").textContent=me?me.user_metadata&&me.user_metadata.name||"":""; $("bAcct").textContent=me?"退出":"登录"; $("bAcct").classList.toggle("hide",!sb); }
-window.__push=function(){ if(!sb||!me||pulling) return; clearTimeout(pushT); pushT=setTimeout(pushNow,1500); };
-function pushNow(){ if(!sb||!me) return; return sb.from("progress").upsert({user_id:me.id,state:S,updated_at:new Date().toISOString()}).then(function(r){ if(r.error) console.warn(r.error); }); }
+window.__push=function(){ if(!sb||!me||pulling) return; clearTimeout(pushT); pushT=setTimeout(function(){pushNow(true)},700); };
+function pushNow(ping){ if(!sb||!me) return; var t=S.t; return sb.from("progress").upsert({user_id:me.id,state:S,updated_at:new Date().toISOString()}).then(function(r){ if(r.error){console.warn(r.error);return;} if(ping&&ch) ch.send({type:"broadcast",event:"up",payload:{t:t}}); }); }
+/* 实时同步：同账号的其他设备更新后，通过 Broadcast 通知本机立即拉取 */
+function live(on){
+  if(ch){ try{sb.removeChannel(ch)}catch(e){} ch=null; }
+  if(!on||!sb||!me) return;
+  ch=sb.channel("jl3000-"+me.id,{config:{broadcast:{self:false}}});
+  ch.on("broadcast",{event:"up"},function(m){ if(m&&m.payload&&(m.payload.t||0)>(S.t||0)) pull(); });
+  ch.subscribe(function(st){ if(st==="SUBSCRIBED") pull(); });
+}
+setInterval(function(){ if(me&&document.visibilityState==="visible") pull(); },15000);
 function pull(){
   if(!sb||!me) return Promise.resolve();
   pulling=true;
@@ -365,13 +374,13 @@ function pull(){
     pulling=false;
     var c=r.data&&r.data.state;
     if(c&&c.counts&&(c.t||0)>(S.t||0)){ stopAudio(); S=upgrade(c); var muted=S.muted; started=false; view=-1; elapsed=0; try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){} render(); }
-    else pushNow();
+    else if((S.t||0)>(c&&c.t||0)) pushNow(true);
   },function(){pulling=false;});
 }
 function after(r,isReg){
   if(r.error){ var m=r.error.message||"";
     $("aMsg").textContent=/already|registered|exists/i.test(m)?"这个用户名已经被注册了，换一个吧":/Invalid login/i.test(m)?(isReg?m:"用户名或密码不对"):/Password/i.test(m)?"密码至少 6 位":m; return; }
-  me=r.data.user; setWho(); showAuth(false); pull();
+  me=r.data.user; setWho(); showAuth(false); live(true);
 }
 function creds(){ var n=$("aName").value.trim(), p=$("aPw").value;
   if(!n){$("aMsg").textContent="请输入用户名";return null} if(p.length<6){$("aMsg").textContent="密码至少 6 位";return null}
@@ -383,9 +392,9 @@ $("aReg").onclick=function(){ var c=creds(); if(!c) return; $("aMsg").textConten
     if(!r.error&&!r.data.session){ $("aMsg").textContent="注册成功，但服务器要求邮箱验证，请联系管理员关闭"; return; }
     after(r,true); }); };
 $("aSkip").onclick=function(){ showAuth(false); try{localStorage.setItem("jl3000_skip","1")}catch(e){} };
-$("bAcct").onclick=function(){ if(!sb) return; if(me){ if(!confirm("退出登录？本机进度会保留。")) return; window.__push&&pushNow(); sb.auth.signOut(); me=null; setWho(); } else showAuth(true); };
-document.addEventListener("visibilitychange",function(){ if(document.visibilityState==="visible") pull(); else if(me) pushNow(); });
-if(sb){ sb.auth.getSession().then(function(r){ me=r.data.session&&r.data.session.user||null; setWho(); if(me) pull(); else { var sk=null; try{sk=localStorage.getItem("jl3000_skip")}catch(e){} if(!sk) showAuth(true); } }); }
+$("bAcct").onclick=function(){ if(!sb) return; if(me){ if(!confirm("退出登录？本机进度会保留。")) return; window.__push&&pushNow(true); live(false); sb.auth.signOut(); me=null; setWho(); } else showAuth(true); };
+document.addEventListener("visibilitychange",function(){ if(document.visibilityState==="visible") pull(); else if(me) pushNow(true); });
+if(sb){ sb.auth.getSession().then(function(r){ me=r.data.session&&r.data.session.user||null; setWho(); if(me) live(true); else { var sk=null; try{sk=localStorage.getItem("jl3000_skip")}catch(e){} if(!sk) showAuth(true); } }); }
 setWho();
 })();
 </script>

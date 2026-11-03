@@ -232,7 +232,7 @@ setInterval(loop,100);
 
 /* ---------- render ---------- */
 function render(){
-  $("stat").innerHTML="已记得<b>"+Object.keys(S.remembered).length+"</b>/ "+N;
+  $("stat").innerHTML="已记得<b>"+Object.keys(S.remembered).length+"</b>/ "+N+" · 已划过<b>"+(S.n||0)+"</b>";
   if(!S.cur){ $("main").classList.add("hide"); $("btns").classList.add("hide"); $("ctl").classList.add("hide"); $("bar").classList.add("hide"); $("done").style.display="flex"; $("start").classList.add("hide"); return; }
   $("main").classList.remove("hide"); $("btns").classList.remove("hide"); $("ctl").classList.remove("hide"); $("bar").classList.remove("hide"); $("done").style.display="none";
   var id=shownId(), w=W[id-1], c=S.counts[id]||1;

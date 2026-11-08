@@ -39,7 +39,7 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(s
 .pc{display:none}
 @media (hover:hover) and (pointer:fine){ .pc{display:inline} .mob{display:none} .nav{display:block} #card{padding-right:70px} }
 #wrow{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
-#word{font-size:46px;font-weight:800;letter-spacing:-.5px;word-break:break-word;line-height:1.12;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+#word{cursor:pointer;font-size:46px;font-weight:800;letter-spacing:-.5px;word-break:break-word;line-height:1.12;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
 #tag{font-size:12px;font-weight:600;padding:4px 11px;border-radius:999px;background:rgba(72,78,232,.10);color:var(--ind);white-space:nowrap}
 #tag.f{background:rgba(255,159,10,.14);color:#C77700}
 #ipa{margin-top:8px;font-size:19px;color:#3a3a3c;font-family:"Lucida Sans Unicode","Arial Unicode MS","Segoe UI","Noto Sans",-apple-system,sans-serif;letter-spacing:.3px}
@@ -207,7 +207,7 @@ function beginWord(){
   if(started && !S.paused){ startAudio(shownId()); }
   else stopAudio();
 }
-function stopAudio(){seq++; try{au.pause()}catch(e){} playId=null}
+function stopAudio(){solo=false; seq++; try{au.pause()}catch(e){} playId=null}
 function startAudio(id){
   stopAudio(); if(!id) return;
   var my=seq; playId=id; step=0; playStep(my);
@@ -225,8 +225,16 @@ function onEnd(my){
   step=(step+1)%(EN_REP+1);
   setTimeout(function(){playStep(my)}, step===0?400:(step===EN_REP?200:60));
 }
-au.addEventListener("ended",function(){onEnd(seq)});
-au.addEventListener("error",function(){var my=seq; setTimeout(function(){onEnd(my)},500)});
+var solo=false;
+function sayWord(){ /* 点单词：读一遍英文 */
+  var id=shownId(); if(!id) return;
+  if(started && !S.paused){ startAudio(id); return; }
+  stopAudio(); solo=true;
+  au.src="audio/en/"+pad(id)+".mp3"; au.muted=false; au.defaultPlaybackRate=RATE_EN; au.playbackRate=RATE_EN;
+  var p=au.play(); if(p&&p.catch) p.catch(function(){solo=false});
+}
+au.addEventListener("ended",function(){ if(solo){solo=false;return;} onEnd(seq)});
+au.addEventListener("error",function(){ if(solo){solo=false;return;} var my=seq; setTimeout(function(){onEnd(my)},500)});
 function loop(){
   var t=performance.now(), dt=t-lastT; lastT=t;
   if(started && !S.paused && S.cur){
@@ -285,6 +293,7 @@ $("bForget").onclick=function(){
   if(!forgetPending){ forgetPending=true; elapsed=0; }
   render();
 };
+$("word").onclick=function(e){ e.stopPropagation(); sayWord(); };
 $("mean").onclick=function(e){ if(!revealed&&this.classList.contains("veil")){ e.stopPropagation(); revealed=true; render(); } };
 /* ---------- 抖音式滑动：上滑下一个，下滑上一个 ---------- */
 var sliding=false, card=$("card"), mainEl=$("main");

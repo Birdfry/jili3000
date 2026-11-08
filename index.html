@@ -300,7 +300,11 @@ $("bOk").onclick=function(){
   var id=shownId(); if(!id) return;
   S.remembered[id]=1; delete S.due[id]; delete S.stg[id];
   if(S.cur&&S.cur.id===id) S.cur.forgot=false;
-  save(); slide(1,function(){ view=-1; advance(); });
+  save(); slide(1,function(){
+    /* reviewing an earlier word: go to the next word in history, not a new one */
+    if(view>=0){ view++; if(view>=S.hist.length-1) view=-1; showView(); }
+    else { view=-1; advance(); }
+  });
 };
 $("bForget").onclick=function(){
   if(!started) return $("bStart").onclick();

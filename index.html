@@ -285,7 +285,7 @@ $("bForget").onclick=function(){
   if(!forgetPending){ forgetPending=true; elapsed=0; }
   render();
 };
-$("mean").onclick=function(){ if(!revealed){ revealed=true; render(); } };
+$("mean").onclick=function(e){ if(!revealed&&this.classList.contains("veil")){ e.stopPropagation(); revealed=true; render(); } };
 /* ---------- 抖音式滑动：上滑下一个，下滑上一个 ---------- */
 var sliding=false, card=$("card"), mainEl=$("main");
 function showView(){ revealed=false; forgetPending=false; elapsed=0; firstDone=false; render(); if(started&&!S.paused) startAudio(shownId()); }

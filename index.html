@@ -145,7 +145,7 @@ function pad(i){return ("000"+i).slice(-4)}
 function rnd(a,b){return a+Math.floor(Math.random()*(b-a+1))}
 
 /* ---------- state ---------- */
-function fresh(){return {v:VER,t:0,n:0,rs:0,remembered:{},counts:{},shown:{},queue:{},cur:null,hist:[],muted:false,paused:false}}
+function fresh(){return {v:VER,t:0,n:0,rs:0,remembered:{},counts:{},shown:{},queue:{},cur:null,hist:[],muted:false,paused:false,nw:[]}}
 var S=load();
 function load(){
   var raw=null;
@@ -184,22 +184,30 @@ function schedule(id){
   }
   S.queue[id]=due;
 }
+var WIN=10, MIN_NEW=5;
 function pickNext(){
   var n=S.n, best=null, bd=Infinity, k;
+  var pool=[]; for(var i=1;i<=N;i++) if(!S.shown[i]&&!S.remembered[i]) pool.push(i);
+  /* any 10 consecutive swipes must contain >=5 never-seen words */
+  var nw=S.nw||[], recent=nw.slice(-(WIN-1)), newCnt=0;
+  for(var j=0;j<recent.length;j++) if(recent[j]) newCnt++;
+  var needNew = newCnt + (WIN-1-recent.length) < MIN_NEW;
+  if(needNew && pool.length) return pool[rnd(0,pool.length-1)];
   for(k in S.queue) if(S.queue[k]<=n && S.queue[k]<bd){bd=S.queue[k];best=+k}
   if(best!==null) return best;
-  var pool=[]; for(var i=1;i<=N;i++) if(!S.shown[i]&&!S.remembered[i]) pool.push(i);
   if(pool.length) return pool[rnd(0,pool.length-1)];
   bd=Infinity; for(k in S.queue) if(S.queue[k]<bd){bd=S.queue[k];best=+k}
   return best;
 }
 /* finalize current word and show the next one */
+function markNew(id){S.nw=(S.nw||[]).concat([S.shown[id]?0:1]).slice(-20)}
 function advance(){
   if(S.cur && !S.remembered[S.cur.id] && S.queue[S.cur.id]===undefined) schedule(S.cur.id);
   S.n++;
   var id=pickNext();
   if(id===null||id===undefined){S.cur=null; save(); render(); return;}
   delete S.queue[id];
+  markNew(id);
   S.shown[id]=1;
   S.counts[id]=(S.counts[id]||0)+1;
   S.cur={id:id,forgot:false};
@@ -419,7 +427,7 @@ window.addEventListener("beforeunload",save);
 if(S.cur && S.remembered[S.cur.id]) { /* defensive */ S.cur=null; }
 if(!S.cur && remaining()>0){
   /* first run (or recovering): pick the first word without needing audio yet */
-  S.n++; var id0=pickNext(); delete S.queue[id0]; S.shown[id0]=1; S.counts[id0]=(S.counts[id0]||0)+1; S.cur={id:id0,forgot:false}; S.hist.push(id0); save();
+  S.n++; var id0=pickNext(); delete S.queue[id0]; markNew(id0); S.shown[id0]=1; S.counts[id0]=(S.counts[id0]||0)+1; S.cur={id:id0,forgot:false}; S.hist.push(id0); save();
 }
 lastT=performance.now(); render();
 

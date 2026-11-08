@@ -28,10 +28,10 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(s
 #top button{background:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.7);color:var(--ind);font-size:14px;padding:6px 14px;border-radius:999px;-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
 #bar{height:6px;background:rgba(60,60,67,.08);margin:0 22px;border-radius:6px;overflow:hidden}
 #bar i{display:block;height:100%;width:0;background:var(--grad);border-radius:6px}
-#main{flex:1;display:flex;flex-direction:column;justify-content:center;padding:20px 18px;overflow:auto;overscroll-behavior:contain;touch-action:pan-x pinch-zoom;user-select:none;-webkit-user-select:none}
+#main{flex:1;display:flex;flex-direction:column;justify-content:flex-start;padding:10px 10px 4px;overflow:auto;overscroll-behavior:contain;touch-action:pan-x pinch-zoom;user-select:none;-webkit-user-select:none}
 #card{will-change:transform,opacity}
-#hint{text-align:center;font-size:12px;color:var(--mut);margin-top:12px;opacity:.75}
-#card{border-radius:28px;padding:28px 24px 24px;position:relative}
+#hint{text-align:center;font-size:12px;color:var(--mut);margin-top:6px;opacity:.75}
+#card{border-radius:28px;padding:28px 24px 24px;position:relative;flex:1 0 auto}
 .nav{display:none;position:absolute;right:14px;width:42px;height:42px;border-radius:50%;border:1px solid rgba(255,255,255,.7);background:rgba(255,255,255,.7);color:var(--ind);font-size:20px;line-height:1;cursor:pointer;box-shadow:0 4px 14px rgba(72,78,232,.15);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
 .nav:hover{background:var(--grad);color:#fff}
 .nav:disabled{opacity:.35;cursor:default;background:rgba(255,255,255,.7);color:var(--ind)}
@@ -54,6 +54,11 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(s
 #rel .x i{font-style:normal;color:var(--mut);font-size:13px}
 #edef{margin-top:16px;font-size:15px;line-height:1.6;font-style:italic;color:#3a3a3c}
 #edef b{font-style:normal;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;color:#0F8C80;background:rgba(20,184,166,.12);margin-right:8px}
+#fam{margin-top:14px;font-size:15px;line-height:1.9}
+#fam .k{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;margin-right:6px;color:#8E3FD6;background:rgba(175,82,222,.12)}
+#fam .r{font-weight:600;color:#5b2a9a;margin-right:8px}
+#fam .x{margin-right:10px;white-space:nowrap}
+#fam .x i{font-style:normal;color:var(--mut);font-size:13px}
 #mem{margin-top:18px;font-size:15px;line-height:1.65;color:#3a3a3c;background:rgba(242,242,247,.8);border-radius:18px;padding:14px 16px}
 #rev{margin-top:16px;font-size:13px;color:var(--ind);text-align:center}
 #ctl{display:flex;justify-content:center;gap:12px;padding:6px 0 8px}
@@ -96,12 +101,13 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(s
   <div id="mean"></div>
   <div id="rel"></div>
   <div id="edef"></div>
+  <div id="fam"></div>
   <div id="mem"></div>
   <button id="nUp" class="nav" title="上一个 (W / ↑)">▲</button>
   <button id="nDn" class="nav" title="下一个 (S / ↓)">▼</button>
  </div>
   <div id="rev" class="hide">回看中 · 点此回到当前</div>
-  <div id="hint"><span class="mob">上滑下一个 · 下滑回看上一个</span><span class="pc">W / ↑ 上一个 · S / ↓ 下一个</span></div>
+  <div id="hint"><span class="mob">上滑或点下半屏：下一个 · 下滑或点上半屏：上一个</span><span class="pc">W / ↑ 上一个 · S / ↓ 下一个</span></div>
 </div>
 <div id="done"><div>🎉</div><div>全部记住了</div></div>
 <div id="ctl"><button id="bPause">暂停</button><button id="bMute">静音</button></div>
@@ -115,6 +121,7 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(s
 <div id="aMsg"></div><button id="aSkip">先不登录</button></div></div>
 <audio id="au" preload="auto" playsinline></audio>
 <script src="words.js"></script>
+<script src="roots.js?v=2"></script>
 <script src="supabase.js"></script>
 <script>
 (function(){
@@ -242,6 +249,9 @@ function render(){
   rh=rl(w[4],"同义","")+rl(w[5],"反义"," a");
   $("rel").innerHTML=rh; $("rel").classList.toggle("hide",!rh);
   $("edef").innerHTML=w[6]?'<b>英英</b>'+esc(w[6]):""; $("edef").classList.toggle("hide",!w[6]);
+  var fm=(window.ROOTS||[])[id-1], fh="";
+  if(fm&&fm[1]&&fm[1].length){ fh='<span class="k">同根</span>'+(fm[0]?'<span class="r">'+esc(fm[0])+'</span>':'')+fm[1].map(function(j){var zh=String(W[j][2]).split(/[,;，；]/)[0]; return '<span class="x">'+esc(W[j][0])+(zh?' <i>'+esc(zh)+'</i>':'')+'</span>'}).join(""); }
+  $("fam").innerHTML=fh; $("fam").classList.toggle("hide",!fh);
   $("mem").textContent=w[3]; $("mem").classList.toggle("hide",!w[3]);
   var tag=c<=1?"首次":"重复 "+(c-1)+" 次";
   var forgot=(view<0&&S.cur.forgot)||(view>=0&&forgetPending);
@@ -326,6 +336,16 @@ mainEl.addEventListener("touchmove",function(e){
 mainEl.addEventListener("touchend",function(){
   if(ty===null) return; ty=null;
   if(tdy<-60&&tBot) goNext(); else if(tdy>60&&tTop) goPrev(); else bounce();
+});
+/* 点击：下半屏=下一个，上半屏=上一个 */
+var tapMoved=false;
+mainEl.addEventListener("touchstart",function(){tapMoved=false},{passive:true});
+mainEl.addEventListener("touchmove",function(){ if(Math.abs(tdy)>10) tapMoved=true; },{passive:true});
+mainEl.addEventListener("click",function(e){
+  if(tapMoved){tapMoved=false;return;}
+  if(e.target.closest("button,#rev,#mean.veil,a,input")) return;
+  var sel=window.getSelection&&String(window.getSelection()); if(sel) return;
+  if(e.clientY>window.innerHeight/2) goNext(); else goPrev();
 });
 var wheelLock=0;
 window.addEventListener("wheel",function(e){

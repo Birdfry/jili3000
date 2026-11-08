@@ -145,7 +145,7 @@ function pad(i){return ("000"+i).slice(-4)}
 function rnd(a,b){return a+Math.floor(Math.random()*(b-a+1))}
 
 /* ---------- state ---------- */
-function fresh(){return {v:VER,t:0,n:0,rs:0,remembered:{},counts:{},shown:{},queue:{},cur:null,hist:[],muted:false,paused:false,nw:[]}}
+function fresh(){return {v:VER,t:0,n:0,rs:0,remembered:{},counts:{},shown:{},queue:{},cur:null,hist:[],muted:false,paused:false,nw:[],due:{},stg:{}}}
 var S=load();
 function load(){
   var raw=null;
@@ -158,7 +158,9 @@ function load(){
   return fresh();
 }
 function upgrade(o){
+  var mig=o.due===undefined;
   var f=fresh(); for(var k in f) if(o[k]===undefined) o[k]=f[k];
+  if(mig){ var t0=Date.now(); for(var q in (o.queue||{})) if(!o.remembered[q]){ o.due[q]=t0; o.stg[q]=0; } o.queue={}; }
   o.v=VER; return o;
 }
 function save(){
@@ -173,40 +175,37 @@ function save(){
 
 /* ---------- scheduler ---------- */
 function remaining(){return N-Object.keys(S.remembered).length}
-function slotTaken(d){for(var k in S.queue) if(S.queue[k]===d) return true; return false}
-function schedule(id){
+/* Ebbinghaus intervals: 5min, 30min, 12h, 1d, 2d, 4d, 7d, 15d, then every 30d */
+var MIN=60000, IVL=[5*MIN,30*MIN,720*MIN,1440*MIN,2*1440*MIN,4*1440*MIN,7*1440*MIN,15*1440*MIN,30*1440*MIN];
+function schedule(id,forgot){
   if(S.remembered[id]) return;
-  var n=S.n, due=n+rnd(10,30)+1;
-  if(slotTaken(due)){
-    var free=[]; for(var d=n+11;d<=n+31;d++) if(!slotTaken(d)) free.push(d);
-    if(free.length) due=free[rnd(0,free.length-1)];
-    else{ due=n+32; while(slotTaken(due)) due++; }
-  }
-  S.queue[id]=due;
+  var st=(forgot||S.stg[id]===undefined)?0:Math.min(S.stg[id]+1,IVL.length-1);
+  S.stg[id]=st; S.due[id]=Date.now()+IVL[st];
 }
 var WIN=10, MIN_NEW=5;
-function pickNext(){
-  var n=S.n, best=null, bd=Infinity, k;
+function pickNext(exclude){
+  var now=Date.now(), best=null, bd=Infinity, k;
   var pool=[]; for(var i=1;i<=N;i++) if(!S.shown[i]&&!S.remembered[i]) pool.push(i);
   /* any 10 consecutive swipes must contain >=5 never-seen words */
   var nw=S.nw||[], recent=nw.slice(-(WIN-1)), newCnt=0;
   for(var j=0;j<recent.length;j++) if(recent[j]) newCnt++;
   var needNew = newCnt + (WIN-1-recent.length) < MIN_NEW;
   if(needNew && pool.length) return pool[rnd(0,pool.length-1)];
-  for(k in S.queue) if(S.queue[k]<=n && S.queue[k]<bd){bd=S.queue[k];best=+k}
+  for(k in S.due) if(+k!==exclude && !S.remembered[k] && S.due[k]<=now && S.due[k]<bd){bd=S.due[k];best=+k}
   if(best!==null) return best;
   if(pool.length) return pool[rnd(0,pool.length-1)];
-  bd=Infinity; for(k in S.queue) if(S.queue[k]<bd){bd=S.queue[k];best=+k}
+  for(k in S.due) if(+k!==exclude && !S.remembered[k] && S.due[k]<bd){bd=S.due[k];best=+k}
   return best;
 }
 /* finalize current word and show the next one */
 function markNew(id){S.nw=(S.nw||[]).concat([S.shown[id]?0:1]).slice(-20)}
 function advance(){
-  if(S.cur && !S.remembered[S.cur.id] && S.queue[S.cur.id]===undefined) schedule(S.cur.id);
+  var prev=S.cur&&S.cur.id;
+  if(S.cur && !S.remembered[S.cur.id]) schedule(S.cur.id, S.cur.forgot);
   S.n++;
-  var id=pickNext();
+  var id=pickNext(prev);
+  if((id===null||id===undefined)&&prev&&!S.remembered[prev]) id=prev;
   if(id===null||id===undefined){S.cur=null; save(); render(); return;}
-  delete S.queue[id];
   markNew(id);
   S.shown[id]=1;
   S.counts[id]=(S.counts[id]||0)+1;
@@ -299,7 +298,7 @@ $("bStart").onclick=function(){
 $("bOk").onclick=function(){
   if(!started) return $("bStart").onclick();
   var id=shownId(); if(!id) return;
-  S.remembered[id]=1; delete S.queue[id];
+  S.remembered[id]=1; delete S.due[id]; delete S.stg[id];
   if(S.cur&&S.cur.id===id) S.cur.forgot=false;
   save(); slide(1,function(){ view=-1; advance(); });
 };
@@ -308,7 +307,7 @@ $("bForget").onclick=function(){
   if(view<0){ if(S.cur){S.cur.forgot=true; save(); render();} return; }
   /* forgot on a reviewed word: mark only, then let a fresh countdown on it finish before moving on */
   var id=S.hist[view];
-  if(!forgetPending){ forgetPending=true; elapsed=0; }
+  if(!forgetPending){ forgetPending=true; elapsed=0; if(!S.remembered[id]){ S.stg[id]=0; S.due[id]=Date.now()+IVL[0]; save(); } }
   render();
 };
 $("word").onclick=function(e){ e.stopPropagation(); sayWord(); };
@@ -427,7 +426,7 @@ window.addEventListener("beforeunload",save);
 if(S.cur && S.remembered[S.cur.id]) { /* defensive */ S.cur=null; }
 if(!S.cur && remaining()>0){
   /* first run (or recovering): pick the first word without needing audio yet */
-  S.n++; var id0=pickNext(); delete S.queue[id0]; markNew(id0); S.shown[id0]=1; S.counts[id0]=(S.counts[id0]||0)+1; S.cur={id:id0,forgot:false}; S.hist.push(id0); save();
+  S.n++; var id0=pickNext(); markNew(id0); S.shown[id0]=1; S.counts[id0]=(S.counts[id0]||0)+1; S.cur={id:id0,forgot:false}; S.hist.push(id0); save();
 }
 lastT=performance.now(); render();
 
